@@ -1,0 +1,103 @@
+{
+  "dashboard": {
+    "title": "Galleon Fleet Overview",
+    "uid": "galleon-fleet",
+    "templating": {
+      "list": [
+        {
+          "name": "cluster",
+          "type": "query",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "query": "label_values(cluster_addon_status, cluster)",
+          "refresh": 2,
+          "includeAll": true,
+          "multi": true,
+          "current": { "selected": true, "text": ["All"], "value": ["$__all"] }
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 100, "title": "$cluster", "type": "row",
+        "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+        "repeat": "cluster", "repeatDirection": "h", "collapsed": false
+      },
+      {
+        "id": 1, "title": "Kubernetes", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 0, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"kubernetes\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 2, "title": "EKS-A", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 3, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"eksa\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 3, "title": "Kubevirt", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 6, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"kubevirt\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 4, "title": "Rook-Ceph", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 9, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"rook_ceph\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 5, "title": "GPU Operator", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 12, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"gpu_operator\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 6, "title": "CDI", "type": "stat",
+        "gridPos": { "h": 5, "w": 2, "x": 15, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"cdi\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 7, "title": "ArgoCD", "type": "stat",
+        "gridPos": { "h": 5, "w": 2, "x": 17, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"argocd\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 8, "title": "Velero", "type": "stat",
+        "gridPos": { "h": 5, "w": 2, "x": 19, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "cluster_addon_status{cluster=\"$cluster\", component=\"velero\"}", "instant": true, "refId": "A", "legendFormat": "{{version}}" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "dark-grey" }, { "value": -1, "color": "dark-grey" }, { "value": 0, "color": "red" }, { "value": 1, "color": "green" }] }, "mappings": [{ "type": "value", "options": { "1": { "text": "RUNNING" } } }, { "type": "value", "options": { "0": { "text": "NOT RUNNING" } } }, { "type": "value", "options": { "-1": { "text": "N/A" } } }], "noValue": "NOT FOUND" } }
+      },
+      {
+        "id": 9, "title": "Health", "type": "stat",
+        "gridPos": { "h": 5, "w": 3, "x": 21, "y": 1 },
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "targets": [{ "expr": "count(cluster_addon_status{cluster=\"$cluster\"} == 1) / count(cluster_addon_status{cluster=\"$cluster\"} >= 0) * 100", "instant": true, "refId": "A", "legendFormat": "Health" }],
+        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+        "fieldConfig": { "defaults": { "unit": "percent", "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "red" }, { "value": 50, "color": "orange" }, { "value": 100, "color": "green" }] } } }
+      }
+    ],
+    "schemaVersion": 39,
+    "version": 3,
+    "refresh": "30s"
+  },
+  "overwrite": true
+}
