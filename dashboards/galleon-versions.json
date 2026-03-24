@@ -7,7 +7,10 @@
         {
           "name": "cluster",
           "type": "query",
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
           "query": "label_values(cluster_addon_status, cluster)",
           "refresh": 2,
           "includeAll": false,
@@ -18,68 +21,199 @@
     },
     "panels": [
       {
-        "id": 1, "title": "Galleon Health", "type": "stat",
-        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
-        "targets": [{
-          "expr": "count(cluster_addon_status{cluster=\"$cluster\"} == 1) / count(cluster_addon_status{cluster=\"$cluster\"} >= 0) * 100",
-          "refId": "A",
-          "legendFormat": "$cluster Health"
-        }],
-        "options": { "textMode": "value_and_name", "colorMode": "background", "graphMode": "none" },
-        "fieldConfig": { "defaults": {
-          "unit": "percent", "decimals": 0,
-          "thresholds": { "mode": "absolute", "steps": [
-            { "value": null, "color": "red" },
-            { "value": 50, "color": "orange" },
-            { "value": 100, "color": "green" }
-          ]}
-        }}
+        "id": 1,
+        "title": "Galleon Health",
+        "type": "stat",
+        "gridPos": {
+          "h": 4,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "targets": [
+          {
+            "expr": "count(cluster_addon_status{cluster=\"$cluster\"} == 1) / count(cluster_addon_status{cluster=\"$cluster\"} >= 0) * 100",
+            "refId": "A",
+            "legendFormat": "$cluster Health"
+          }
+        ],
+        "options": {
+          "textMode": "value_and_name",
+          "colorMode": "background",
+          "graphMode": "none"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 50,
+                  "color": "orange"
+                },
+                {
+                  "value": 100,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
       },
       {
-        "id": 2, "title": "Galleon Add-on Versions", "type": "table",
-        "gridPos": { "h": 14, "w": 24, "x": 0, "y": 4 },
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "id": 2,
+        "title": "Galleon Add-on Versions",
+        "type": "table",
+        "gridPos": {
+          "h": 14,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
         "targets": [
-          { "expr": "cluster_addon_info{cluster=\"$cluster\"}", "format": "table", "instant": true, "refId": "A" },
-          { "expr": "cluster_addon_status{cluster=\"$cluster\"}", "format": "table", "instant": true, "refId": "B" }
+          {
+            "expr": "cluster_addon_info{cluster=\"$cluster\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          },
+          {
+            "expr": "cluster_addon_status{cluster=\"$cluster\"}",
+            "format": "table",
+            "instant": true,
+            "refId": "B"
+          }
         ],
         "transformations": [
-          { "id": "seriesToColumns", "options": { "byField": "component" } },
-          { "id": "organize", "options": {
-            "excludeByName": {
-              "Time 1": true, "Time 2": true, "Value #A": true,
-              "cluster 1": true, "cluster 2": true,
-              "endpoint 1": true, "endpoint 2": true,
-              "instance 1": true, "instance 2": true,
-              "job 1": true, "job 2": true,
-              "namespace 1": true, "namespace 2": true,
-              "pod 1": true, "pod 2": true,
-              "service 1": true, "service 2": true,
-              "__name__ 1": true, "__name__ 2": true,
-              "version 2": true,
-              "container 1": true, "container 2": true
-            },
-            "renameByName": {
-              "component": "Component",
-              "version 1": "Version",
-              "Value #B": "Status"
+          {
+            "id": "seriesToColumns",
+            "options": {
+              "byField": "component"
             }
-          }}
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time 1": true,
+                "Time 2": true,
+                "Value #A": true,
+                "cluster 1": true,
+                "cluster 2": true,
+                "endpoint 1": true,
+                "endpoint 2": true,
+                "instance 1": true,
+                "instance 2": true,
+                "job 1": true,
+                "job 2": true,
+                "namespace 1": true,
+                "namespace 2": true,
+                "pod 1": true,
+                "pod 2": true,
+                "service 1": true,
+                "service 2": true,
+                "__name__ 1": true,
+                "__name__ 2": true,
+                "version 2": true,
+                "container 1": true,
+                "container 2": true,
+                "prometheus 1": true,
+                "prometheus 2": true,
+                "prometheus_replica 1": true,
+                "prometheus_replica 2": true
+              },
+              "renameByName": {
+                "component": "Component",
+                "version 1": "Version",
+                "Value #B": "Status"
+              }
+            }
+          }
         ],
         "fieldConfig": {
-          "defaults": { "custom": { "align": "left" } },
+          "defaults": {
+            "custom": {
+              "align": "left"
+            }
+          },
           "overrides": [
-            { "matcher": { "id": "byName", "options": "Status" }, "properties": [
-              { "id": "custom.cellOptions", "value": { "type": "color-background", "mode": "basic" } },
-              { "id": "mappings", "value": [
-                { "type": "value", "options": { "1": { "text": "RUNNING", "color": "green" } } },
-                { "type": "value", "options": { "0": { "text": "NOT RUNNING", "color": "red" } } },
-                { "type": "value", "options": { "-1": { "text": "NOT INSTALLED", "color": "dark-grey" } } }
-              ]},
-              { "id": "custom.width", "value": 200 }
-            ]},
-            { "matcher": { "id": "byName", "options": "Component" }, "properties": [{ "id": "custom.width", "value": 200 }] }
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Status"
+              },
+              "properties": [
+                {
+                  "id": "custom.cellOptions",
+                  "value": {
+                    "type": "color-background",
+                    "mode": "basic"
+                  }
+                },
+                {
+                  "id": "mappings",
+                  "value": [
+                    {
+                      "type": "value",
+                      "options": {
+                        "1": {
+                          "text": "RUNNING",
+                          "color": "green"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "0": {
+                          "text": "NOT RUNNING",
+                          "color": "red"
+                        }
+                      }
+                    },
+                    {
+                      "type": "value",
+                      "options": {
+                        "-1": {
+                          "text": "NOT INSTALLED",
+                          "color": "dark-grey"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "custom.width",
+                  "value": 200
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "Component"
+              },
+              "properties": [
+                {
+                  "id": "custom.width",
+                  "value": 200
+                }
+              ]
+            }
           ]
         }
       }
