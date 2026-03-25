@@ -72,6 +72,11 @@ cluster_addon_status{cluster="houston-galleon",component="argocd",version="N/A"}
 | `image.tag` | `3.12-slim` | Container image tag. |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `scrapeInterval` | `300s` | How often Prometheus scrapes the exporter. |
+| `serviceMonitorLabels` | `{}` | Extra labels to add to the ServiceMonitor (e.g. `release: kube-prometheus-stack`). Required when the local Prometheus has a `serviceMonitorSelector` configured. |
+| `remoteWrite.enabled` | `false` | Enable automatic remote-write configuration via a post-install Job. |
+| `remoteWrite.centralPrometheusUrl` | `""` | URL of the central Prometheus (e.g. `http://10.20.22.215:30090`). |
+| `remoteWrite.prometheusName` | `""` | Name of the Prometheus custom resource on the galleon cluster (e.g. `kube-prom-stack-kube-prome-prometheus`). |
+| `remoteWrite.prometheusNamespace` | `monitoring` | Namespace where the Prometheus CR lives. |
 
 ---
 
@@ -87,7 +92,7 @@ cluster_addon_status{cluster="houston-galleon",component="argocd",version="N/A"}
 
 ### Step 1: Set Up the Central Monitoring Cluster
 
-Deploy `kube-prometheus-stack` on the central cluster with the remote-write receiver enabled:
+Deploy `kube-prometheus-stack` on the central cluster with the remote-write receiver enabled and Prometheus exposed via NodePort:
 
 ```bash
 export KUBECONFIG=~/central-cluster.yaml
@@ -98,20 +103,16 @@ helm repo update
 helm install central-prom prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   --create-namespace \
-  --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true
+  --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true \
+  --set 'prometheus.prometheusSpec.tsdb.outOfOrderTimeWindow=10m' \
+  --set prometheus.service.type=NodePort \
+  --set prometheus.service.nodePort=30090
 ```
 
 Wait for all pods to be ready:
 
 ```bash
 kubectl get pods -n monitoring -w
-```
-
-Expose Prometheus via NodePort so galleon clusters can reach it:
-
-```bash
-kubectl patch svc central-prom-kube-promethe-prometheus -n monitoring \
-  --type merge -p '{"spec":{"type":"NodePort","ports":[{"port":9090,"targetPort":9090,"nodePort":30090,"name":"http-web"}]}}'
 ```
 
 Note the central Prometheus URL:
@@ -133,103 +134,79 @@ kubectl run test-net --rm -it --image=busybox --restart=Never \
 
 ### Step 2: Deploy the Version Exporter on Each Galleon
 
-For each galleon cluster, install the Helm chart with a human-readable galleon name:
+Before installing, gather the required information from the galleon cluster:
 
 ```bash
+export KUBECONFIG=~/galleon-kubeconfig.yaml
+
+# Get the Prometheus CR name
+kubectl get prometheus -n monitoring
+
+# Check if ServiceMonitor needs extra labels
+kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
+```
+
+Then install the Helm chart — this single command deploys the exporter, configures the ServiceMonitor, and sets up remote-write:
+
+```bash
+helm install version-exporter ./charts/galleon-version-exporter/ \
+  --namespace version-exporter \
+  --create-namespace \
+  --set galleonName=<galleon-name> \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://<CENTRAL_NODE_IP>:30090 \
+  --set remoteWrite.prometheusName=<prometheus-cr-name> \
+  --set serviceMonitorLabels.release=<prometheus-release-name>
+```
+
+Example for two galleons:
+
+```bash
+# Galleon 1
 export KUBECONFIG=~/galleon-one.yaml
 
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
   --create-namespace \
-  --set galleonName=houston-galleon
-```
+  --set galleonName=houston-galleon \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://10.20.22.215:30090 \
+  --set remoteWrite.prometheusName=kube-prom-stack-kube-prome-prometheus \
+  --set serviceMonitorLabels.release=kube-prom-stack
 
-> **Important:** The `galleonName` should be a human-readable identifier (e.g. `houston-galleon`, `alaska-edgelight`), not a technical cluster name. This name appears in the Grafana dashboard. It cannot be changed via `helm upgrade` — you must uninstall and reinstall to change it.
-
-Repeat for each galleon:
-
-```bash
+# Galleon 2
 export KUBECONFIG=~/galleon-two.yaml
 
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
   --create-namespace \
-  --set galleonName=alaska-edgelight
+  --set galleonName=alaska-edgelight \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://10.20.22.215:30090 \
+  --set remoteWrite.prometheusName=kube-prometheus-stack-prometheus \
+  --set serviceMonitorLabels.release=kube-prometheus-stack
 ```
 
-#### Verify the exporter is running
+> **Important:** The `galleonName` should be a human-readable identifier (e.g. `houston-galleon`, `alaska-edgelight`), not a technical cluster name. This name appears in the Grafana dashboard. It cannot be changed via `helm upgrade` — you must uninstall and reinstall to change it.
+
+#### Verify the installation
 
 ```bash
+# Check exporter pod is running
 kubectl get pods -n version-exporter
+
+# Verify remote-write was configured
+kubectl get prometheus <PROMETHEUS_CR_NAME> -n monitoring -o jsonpath='{.spec.remoteWrite}' ; echo
 ```
 
-#### Test the metrics output
+#### Verify data is flowing to the central Prometheus
 
-```bash
-kubectl port-forward svc/version-exporter-version-exporter 9100:9100 -n version-exporter &
-sleep 5
-curl localhost:9100/metrics
-```
-
-#### Handle ServiceMonitor label requirements
-
-Check what label selector the local Prometheus expects:
-
-```bash
-kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
-```
-
-If it returns something like `{"matchLabels":{"release":"kube-prometheus-stack"}}`, patch the ServiceMonitor:
-
-```bash
-kubectl patch servicemonitor version-exporter-version-exporter -n version-exporter \
-  --type merge -p '{"metadata":{"labels":{"release":"kube-prometheus-stack"}}}'
-```
-
-If it returns `{}`, no extra label is needed.
-
----
-
-### Step 3: Configure Remote-Write from Each Galleon to the Central Prometheus
-
-Find the Prometheus custom resource name on the galleon:
-
-```bash
-kubectl get prometheus -n monitoring
-```
-
-Patch it to enable remote-write:
-
-```bash
-kubectl patch prometheus <PROMETHEUS_CR_NAME> -n monitoring \
-  --type merge \
-  -p '{"spec":{"remoteWrite":[{"url":"http://<CENTRAL_NODE_IP>:30090/api/v1/write"}]}}'
-```
-
-Example:
-
-```bash
-kubectl patch prometheus kube-prom-stack-kube-prome-prometheus -n monitoring \
-  --type merge \
-  -p '{"spec":{"remoteWrite":[{"url":"http://10.20.22.215:30090/api/v1/write"}]}}'
-```
-
-#### Verify remote-write is working
-
-Check the Prometheus logs:
-
-```bash
-kubectl logs -n monitoring statefulset/<prometheus-statefulset-name> \
-  -c prometheus --tail=20 | grep -i remote
-```
-
-You should see `"Starting WAL watcher"` and `"Done replaying WAL"`.
-
-Verify data arrived at the central Prometheus:
+Wait ~5 minutes, then check the central Prometheus:
 
 ```bash
 export KUBECONFIG=~/central-cluster.yaml
 kubectl port-forward svc/central-prom-kube-promethe-prometheus 9090:9090 -n monitoring &
+sleep 5
 
 curl -s "http://localhost:9090/api/v1/query?query=cluster_addon_info" | python3 -c "
 import sys, json
@@ -241,7 +218,7 @@ for r in data.get('data', {}).get('result', []):
 
 ---
 
-### Step 4: Set Up the Grafana Dashboard
+### Step 3: Set Up the Grafana Dashboard
 
 Access the central Grafana:
 
@@ -253,49 +230,37 @@ kubectl get secret --namespace monitoring central-prom-grafana \
   -o jsonpath="{.data.admin-password}" | base64 -d ; echo
 
 # Port-forward Grafana
-kubectl port-forward svc/central-prom-grafana 3000:80 -n monitoring --address 0.0.0.0 &
+kubectl port-forward svc/central-prom-grafana 3060:80 -n monitoring --address 0.0.0.0 &
 ```
 
-Open `http://localhost:3000` and log in with `admin` and the password.
+Open `http://localhost:3060` and log in with `admin` and the password.
 
-#### Get the Prometheus datasource UID
+#### Apply the dashboards
 
 ```bash
 GRAFANA_PASS="<password-from-above>"
 
-curl -s -u "admin:${GRAFANA_PASS}" http://localhost:3000/api/datasources | python3 -c "
-import sys, json
-for ds in json.loads(sys.stdin.read()):
-    if ds['type'] == 'prometheus':
-        print(ds['uid'])
-        break
-"
-```
+cd ~/galleon-monitoring
 
-#### Apply the dashboards
-
-The dashboard JSON files are in the `dashboards/` directory. Before applying, replace `DATASOURCE_UID` in the JSON files with the actual UID, then push via the Grafana API:
-
-```bash
 # Apply the table view dashboard
-sed "s/DATASOURCE_UID/<your-datasource-uid>/g" dashboards/galleon-versions.json > /tmp/gv.json
+sed 's/DATASOURCE_UID/prometheus/g' dashboards/galleon-versions.json > /tmp/gv.json
 curl -s -u "admin:${GRAFANA_PASS}" \
   -H "Content-Type: application/json" \
-  -X POST http://localhost:3000/api/dashboards/db \
+  -X POST http://localhost:3060/api/dashboards/db \
   -d @/tmp/gv.json
 
 # Apply the fleet card view dashboard
-sed "s/DATASOURCE_UID/<your-datasource-uid>/g" dashboards/galleon-fleet.json > /tmp/gf.json
+sed 's/DATASOURCE_UID/prometheus/g' dashboards/galleon-fleet.json > /tmp/gf.json
 curl -s -u "admin:${GRAFANA_PASS}" \
   -H "Content-Type: application/json" \
-  -X POST http://localhost:3000/api/dashboards/db \
+  -X POST http://localhost:3060/api/dashboards/db \
   -d @/tmp/gf.json
 ```
 
 The dashboards will be available at:
 
-- Table view: `http://localhost:3000/d/galleon-versions`
-- Fleet view: `http://localhost:3000/d/galleon-fleet`
+- Table view: `http://localhost:3060/d/galleon-versions`
+- Fleet view: `http://localhost:3060/d/galleon-fleet`
 
 ---
 
@@ -311,38 +276,32 @@ The dashboards will be available at:
 
 ## Adding a New Galleon Cluster
 
-1. Install the Helm chart:
+Before installing, gather the required information:
 
 ```bash
 export KUBECONFIG=~/new-galleon.yaml
 
+# Get the Prometheus CR name
+kubectl get prometheus -n monitoring
+
+# Check ServiceMonitor label requirements
+kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
+```
+
+Then install with a single command:
+
+```bash
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
   --create-namespace \
-  --set galleonName=<new-galleon-name>
+  --set galleonName=<new-galleon-name> \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://<CENTRAL_NODE_IP>:30090 \
+  --set remoteWrite.prometheusName=<prometheus-cr-name> \
+  --set serviceMonitorLabels.release=<prometheus-release-name>
 ```
 
 > **Important:** Use a human-readable name that identifies the physical galleon. This name cannot be changed without reinstalling.
-
-1. Patch ServiceMonitor if needed:
-
-```bash
-kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
-
-# If labels are required:
-kubectl patch servicemonitor version-exporter-version-exporter -n version-exporter \
-  --type merge -p '{"metadata":{"labels":{"release":"<release-name>"}}}'
-```
-
-1. Configure remote-write:
-
-```bash
-kubectl get prometheus -n monitoring
-
-kubectl patch prometheus <PROMETHEUS_CR_NAME> -n monitoring \
-  --type merge \
-  -p '{"spec":{"remoteWrite":[{"url":"http://<CENTRAL_NODE_IP>:30090/api/v1/write"}]}}'
-```
 
 The new galleon will appear in the Grafana dashboard within 5 minutes.
 
@@ -357,7 +316,11 @@ helm uninstall version-exporter -n version-exporter
 
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
-  --set galleonName=<new-name>
+  --set galleonName=<new-name> \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://<CENTRAL_NODE_IP>:30090 \
+  --set remoteWrite.prometheusName=<prometheus-cr-name> \
+  --set serviceMonitorLabels.release=<prometheus-release-name>
 ```
 
 After renaming, restart the central Prometheus to flush stale metrics with the old name:
@@ -368,8 +331,6 @@ kubectl rollout restart statefulset prometheus-central-prom-kube-promethe-promet
 ```
 
 Wait ~5 minutes for remote-write to push fresh metrics with the new name.
-
-> **Note:** Don't forget to re-patch the ServiceMonitor label if the galleon's Prometheus requires it.
 
 ---
 
@@ -446,24 +407,44 @@ Check what label selector Prometheus expects:
 kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
 ```
 
-Ensure the ServiceMonitor has the matching label.
+Ensure the `serviceMonitorLabels` value was set correctly during install. Verify the ServiceMonitor has the label:
+
+```bash
+kubectl get servicemonitor version-exporter-version-exporter -n version-exporter --show-labels
+```
 
 ### Remote-write not working
+
+Verify the remote-write Job ran successfully:
+
+```bash
+kubectl get prometheus <PROMETHEUS_CR_NAME> -n monitoring -o jsonpath='{.spec.remoteWrite}' ; echo
+```
+
+If empty, the Job may have failed. Check the Job logs:
+
+```bash
+kubectl get jobs -n version-exporter
+kubectl logs -n version-exporter -l app=version-exporter-remote-write
+```
+
+> Note: Successful Jobs are automatically cleaned up by Helm. If no Job exists and remote-write is configured, it worked.
 
 Verify the central Prometheus has the receiver enabled:
 
 ```bash
+export KUBECONFIG=~/central-cluster.yaml
 kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.enableRemoteWriteReceiver}' ; echo
 ```
 
-Check the galleon Prometheus logs:
+Check the galleon Prometheus logs for remote-write errors:
 
 ```bash
 kubectl logs -n monitoring statefulset/<prometheus-statefulset> \
   -c prometheus --tail=20 | grep -i remote
 ```
 
-Verify network connectivity:
+Verify network connectivity from the galleon to the central Prometheus:
 
 ```bash
 kubectl run test-net --rm -it --image=busybox --restart=Never \
@@ -476,7 +457,7 @@ kubectl run test-net --rm -it --image=busybox --restart=Never \
 2. Query the central Prometheus directly to verify data exists:
 
 ```bash
-curl -s "http://<CENTRAL_PROMETHEUS>:9090/api/v1/query?query=cluster_addon_info"
+curl -s "http://<CENTRAL_PROMETHEUS>:30090/api/v1/query?query=cluster_addon_info"
 ```
 
 1. If data exists but dashboard is empty, verify the datasource UID in the dashboard JSON matches your Prometheus datasource
@@ -486,38 +467,50 @@ curl -s "http://<CENTRAL_PROMETHEUS>:9090/api/v1/query?query=cluster_addon_info"
 If you see old cluster names after renaming, restart the central Prometheus:
 
 ```bash
+export KUBECONFIG=~/central-cluster.yaml
 kubectl rollout restart statefulset prometheus-central-prom-kube-promethe-prometheus -n monitoring
 ```
 
 Wait ~5 minutes for fresh data to arrive via remote-write.
+
+### Duplicate tiles in dashboard
+
+If a component shows multiple tiles for the same cluster, it means multiple exporters are running on that cluster. Ensure only one version-exporter deployment exists:
+
+```bash
+kubectl get deployments -A | grep -i exporter
+```
+
+Remove any duplicate exporters. Only the `version-exporter-version-exporter` deployment in the `version-exporter` namespace should exist.
 
 ---
 
 ## Complete Data Flow
 
 ```
-Helm Chart (deployed inside each galleon)
+helm install (on each galleon)
   │
   ├─► Version Exporter Pod
   │     Queries Kubernetes API using in-cluster ServiceAccount
-  │     Checks 8 components
+  │     Checks 8 components (Kubernetes, EKS-A, Kubevirt, Rook-Ceph,
+  │       GPU Operator, CDI, ArgoCD, Velero)
   │     Caches results in background thread (every 5 minutes)
-  │     Exposes metrics on port 9100
+  │     Exposes metrics on port 9100 with cluster="<galleonName>" label
   │
-  ├─► ServiceMonitor
+  ├─► ServiceMonitor (with configurable extra labels)
   │     Tells local Prometheus: "scrape port 9100 on this service"
+  │
+  ├─► Post-install Job (configures remote-write automatically)
+  │     Patches the local Prometheus CR with central Prometheus URL
   │
   ▼
 Local Prometheus (existing kube-prometheus-stack in each galleon)
   │     Scrapes the exporter every 5 minutes
-  │     Stores metrics locally
-  │
-  │     remote-write configured via:
-  │     kubectl patch prometheus ... --type merge
-  │       -p '{"spec":{"remoteWrite":[{"url":"http://CENTRAL:30090/api/v1/write"}]}}'
+  │     Remote-writes all metrics to the central Prometheus
   │
   ▼
 Central Prometheus (kube-prometheus-stack with enableRemoteWriteReceiver=true)
+  │     Exposed via NodePort 30090
   │     Receives and stores metrics from all galleons
   │     All metrics have a "cluster" label identifying the source galleon
   │
@@ -526,4 +519,5 @@ Central Grafana
        Single datasource pointing to the local central Prometheus
        Dashboard with cluster dropdown filter
        Table and fleet card views showing Component, Version, and Status
+       New galleons auto-discovered via label_values() query
 ```

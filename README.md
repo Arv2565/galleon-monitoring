@@ -25,28 +25,24 @@ helm repo update
 helm install central-prom prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   --create-namespace \
-  --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true
-
-kubectl patch svc central-prom-kube-promethe-prometheus -n monitoring \
-  --type merge -p '{"spec":{"type":"NodePort","ports":[{"port":9090,"targetPort":9090,"nodePort":30090,"name":"http-web"}]}}'
+  --set prometheus.prometheusSpec.enableRemoteWriteReceiver=true \
+  --set 'prometheus.prometheusSpec.tsdb.outOfOrderTimeWindow=10m' \
+  --set prometheus.service.type=NodePort \
+  --set prometheus.service.nodePort=30090
 ```
 
-### 2. Add a galleon cluster
+### 2. Add a galleon cluster (single command)
 ```bash
 export KUBECONFIG=~/galleon-kubeconfig.yaml
 
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
   --create-namespace \
-  --set galleonName=<galleon-name>
-
-# Check if ServiceMonitor needs a label
-kubectl get prometheus -n monitoring -o jsonpath='{.items[0].spec.serviceMonitorSelector}' ; echo
-
-# Configure remote-write
-kubectl get prometheus -n monitoring
-kubectl patch prometheus <PROMETHEUS_CR_NAME> -n monitoring \
-  --type merge -p '{"spec":{"remoteWrite":[{"url":"http://<CENTRAL_NODE_IP>:30090/api/v1/write"}]}}'
+  --set galleonName=<galleon-name> \
+  --set remoteWrite.enabled=true \
+  --set remoteWrite.centralPrometheusUrl=http://<CENTRAL_NODE_IP>:30090 \
+  --set remoteWrite.prometheusName=<prometheus-cr-name> \
+  --set serviceMonitorLabels.release=<prometheus-release-name>
 ```
 
 ### 3. Set up dashboards
