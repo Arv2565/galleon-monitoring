@@ -80,10 +80,10 @@ The exporter exposes two Prometheus metrics per component on port 9100:
 Example output:
 
 ```
-cluster_addon_info{cluster="houston-galleon",component="kubevirt",version="v1.7.2"} 1
-cluster_addon_status{cluster="houston-galleon",component="kubevirt",version="v1.7.2"} 1
-cluster_addon_info{cluster="houston-galleon",component="argocd",version="N/A"} 1
-cluster_addon_status{cluster="houston-galleon",component="argocd",version="N/A"} -1
+cluster_addon_info{cluster="my-galleon",component="kubevirt",version="v1.7.2"} 1
+cluster_addon_status{cluster="my-galleon",component="kubevirt",version="v1.7.2"} 1
+cluster_addon_info{cluster="my-galleon",component="argocd",version="N/A"} 1
+cluster_addon_status{cluster="my-galleon",component="argocd",version="N/A"} -1
 ```
 
 ## Status Color Codes
@@ -98,15 +98,15 @@ cluster_addon_status{cluster="houston-galleon",component="argocd",version="N/A"}
 
 | Key | Default | Description |
 |---|---|---|
-| `galleonName` | `""` | **Required.** Human-readable name of the galleon (e.g. `houston-galleon`). Used as the `cluster` label in all metrics. Cannot be changed via `helm upgrade` — requires uninstall and reinstall. |
+| `galleonName` | `""` | **Required.** Human-readable name of the galleon. Used as the `cluster` label in all metrics and displayed in the Grafana dashboard. Cannot be changed via `helm upgrade` — requires uninstall and reinstall. |
 | `image.repository` | `python` | Container image for the exporter. |
 | `image.tag` | `3.12-slim` | Container image tag. |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `scrapeInterval` | `300s` | How often Prometheus scrapes the exporter. |
 | `serviceMonitorLabels` | `{}` | Extra labels for the ServiceMonitor (e.g. `release: kube-prometheus-stack`). Required when the local Prometheus has a `serviceMonitorSelector`. |
 | `remoteWrite.enabled` | `false` | Enable automatic remote-write configuration via a post-install Job. |
-| `remoteWrite.centralPrometheusUrl` | `""` | URL of the central Prometheus (e.g. `http://10.20.22.215:30090`). |
-| `remoteWrite.prometheusName` | `""` | Name of the Prometheus CR on the galleon (e.g. `kube-prom-stack-kube-prome-prometheus`). |
+| `remoteWrite.centralPrometheusUrl` | `""` | URL of the central Prometheus (e.g. `http://<CENTRAL_NODE_IP>:30090`). |
+| `remoteWrite.prometheusName` | `""` | Name of the Prometheus CR on the galleon cluster. |
 | `remoteWrite.prometheusNamespace` | `monitoring` | Namespace where the Prometheus CR lives. |
 
 ---
@@ -190,35 +190,7 @@ helm install version-exporter ./charts/galleon-version-exporter/ \
   --set serviceMonitorLabels.release=<prometheus-release-name>
 ```
 
-Example for two galleons:
-
-```bash
-# Galleon 1
-export KUBECONFIG=~/galleon-one.yaml
-
-helm install version-exporter ./charts/galleon-version-exporter/ \
-  --namespace version-exporter \
-  --create-namespace \
-  --set galleonName=houston-galleon \
-  --set remoteWrite.enabled=true \
-  --set remoteWrite.centralPrometheusUrl=http://10.20.22.215:30090 \
-  --set remoteWrite.prometheusName=kube-prom-stack-kube-prome-prometheus \
-  --set serviceMonitorLabels.release=kube-prom-stack
-
-# Galleon 2
-export KUBECONFIG=~/galleon-two.yaml
-
-helm install version-exporter ./charts/galleon-version-exporter/ \
-  --namespace version-exporter \
-  --create-namespace \
-  --set galleonName=alaska-edgelight \
-  --set remoteWrite.enabled=true \
-  --set remoteWrite.centralPrometheusUrl=http://10.20.22.215:30090 \
-  --set remoteWrite.prometheusName=kube-prometheus-stack-prometheus \
-  --set serviceMonitorLabels.release=kube-prometheus-stack
-```
-
-> **Important:** The `galleonName` should be a human-readable identifier (e.g. `houston-galleon`, `alaska-edgelight`), not a technical cluster name. This name appears in the Grafana dashboard. It cannot be changed via `helm upgrade` — you must uninstall and reinstall to change it.
+> **Important:** The `galleonName` should be a human-readable identifier for the galleon. This name appears in the Grafana dashboard. It cannot be changed via `helm upgrade` — you must uninstall and reinstall to change it.
 
 #### Verify the installation
 
@@ -312,7 +284,7 @@ Install with a single command:
 helm install version-exporter ./charts/galleon-version-exporter/ \
   --namespace version-exporter \
   --create-namespace \
-  --set galleonName=<new-galleon-name> \
+  --set galleonName=<galleon-name> \
   --set remoteWrite.enabled=true \
   --set remoteWrite.centralPrometheusUrl=http://<CENTRAL_NODE_IP>:30090 \
   --set remoteWrite.prometheusName=<prometheus-cr-name> \
@@ -363,7 +335,7 @@ results = {
 }
 ```
 
-2. Add detection logic. For deployment-based:
+1. Add detection logic. For deployment-based:
 
 ```python
 ver, status = get_deployment_version("istio-system", "istiod")
@@ -381,7 +353,7 @@ if data and data.get("items"):
         results["istio"] = {"version": ver, "status": check_namespace_running("istio-system")}
 ```
 
-3. Add RBAC permissions if needed (in `templates/clusterrole.yaml`):
+1. Add RBAC permissions if needed (in `templates/clusterrole.yaml`):
 
 ```yaml
 - apiGroups: ["<api-group>"]
@@ -389,7 +361,7 @@ if data and data.get("items"):
   verbs: ["get", "list"]
 ```
 
-4. Upgrade on all galleons:
+1. Upgrade on all galleons:
 
 ```bash
 helm upgrade version-exporter ./charts/galleon-version-exporter/ \
