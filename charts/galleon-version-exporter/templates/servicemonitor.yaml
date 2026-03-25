@@ -6,6 +6,9 @@ metadata:
   labels:
     app: version-exporter
     galleon: {{ .Values.galleonName }}
+    {{- range $key, $val := .Values.serviceMonitorLabels }}
+    {{ $key }}: {{ $val | quote }}
+    {{- end }}
 spec:
   selector:
     matchLabels:

@@ -1,0 +1,78 @@
+{{- if .Values.remoteWrite.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-configure-remote-write
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: version-exporter
+    galleon: {{ .Values.galleonName }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: version-exporter-remote-write
+    spec:
+      serviceAccountName: {{ .Release.Name }}-remote-write-config
+      restartPolicy: Never
+      containers:
+        - name: configure
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - python3
+            - -c
+            - |
+              import urllib.request, json, ssl, os
+
+              TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+              CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              API = "https://kubernetes.default.svc"
+
+              token = open(TOKEN_PATH).read()
+              ctx = ssl.create_default_context(cafile=CA_PATH)
+
+              prom_name = os.environ["PROMETHEUS_NAME"]
+              prom_ns = os.environ["PROMETHEUS_NAMESPACE"]
+              central_url = os.environ["CENTRAL_URL"]
+
+              patch_url = API + "/apis/monitoring.coreos.com/v1/namespaces/" + prom_ns + "/prometheuses/" + prom_name
+
+              patch_body = json.dumps({
+                  "spec": {
+                      "remoteWrite": [
+                          {"url": central_url + "/api/v1/write"}
+                      ]
+                  }
+              }).encode()
+
+              req = urllib.request.Request(
+                  patch_url,
+                  data=patch_body,
+                  headers={
+                      "Authorization": "Bearer " + token,
+                      "Content-Type": "application/merge-patch+json"
+                  },
+                  method="PATCH"
+              )
+
+              try:
+                  resp = urllib.request.urlopen(req, context=ctx, timeout=30)
+                  print("Remote-write configured successfully!", flush=True)
+                  print("Prometheus: " + prom_name, flush=True)
+                  print("Central URL: " + central_url + "/api/v1/write", flush=True)
+              except Exception as e:
+                  print("Failed to configure remote-write: " + str(e), flush=True)
+                  raise
+          env:
+            - name: PROMETHEUS_NAME
+              value: {{ .Values.remoteWrite.prometheusName | quote }}
+            - name: PROMETHEUS_NAMESPACE
+              value: {{ .Values.remoteWrite.prometheusNamespace | quote }}
+            - name: CENTRAL_URL
+              value: {{ .Values.remoteWrite.centralPrometheusUrl | quote }}
+{{- end }}

@@ -7,9 +7,17 @@ image:
 
 scrapeInterval: 300s
 
+# ServiceMonitor extra labels (to match Prometheus selector)
+serviceMonitorLabels: {}
+
+# Remote-write configuration
+remoteWrite:
+  enabled: false
+  centralPrometheusUrl: ""
+  prometheusName: ""
+  prometheusNamespace: monitoring
+
 # Components to monitor
-# Each component defines how to get its version
-# method: "api_version" | "crd" | "deployment"
 components:
   kubernetes:
     method: api_version
