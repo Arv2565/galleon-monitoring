@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {{ .Release.Name }}-version-exporter
-  namespace: {{ .Release.Namespace }}
+  namespace: {{ .Values.serviceMonitorNamespace }}
   labels:
     app: version-exporter
     galleon: {{ .Values.galleonName }}
@@ -10,6 +10,9 @@ metadata:
     {{ $key }}: {{ $val | quote }}
     {{- end }}
 spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
   selector:
     matchLabels:
       app: version-exporter

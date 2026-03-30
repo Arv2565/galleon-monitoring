@@ -7,10 +7,15 @@ image:
 
 scrapeInterval: 300s
 
+# Namespace where the ServiceMonitor will be created
+# Must match where Prometheus looks for ServiceMonitors
+serviceMonitorNamespace: monitoring
+
 # ServiceMonitor extra labels (to match Prometheus selector)
 serviceMonitorLabels: {}
 
-# Remote-write configuration
+# Remote-write configuration (disabled by default)
+# Only enable if the cluster does NOT already have remote-write configured
 remoteWrite:
   enabled: false
   centralPrometheusUrl: ""
